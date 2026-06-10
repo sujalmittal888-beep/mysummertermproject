@@ -1,0 +1,35 @@
+services:
+  api:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      TASKFLOW_ENV: production
+      TASKFLOW_LLM_PROVIDER: ${TASKFLOW_LLM_PROVIDER:-mock}
+      TASKFLOW_OPENAI_API_KEY: ${TASKFLOW_OPENAI_API_KEY:-}
+      TASKFLOW_ANTHROPIC_API_KEY: ${TASKFLOW_ANTHROPIC_API_KEY:-}
+      TASKFLOW_DATABASE_URL: postgresql+psycopg2://taskflow:taskflow@db:5432/taskflow
+      TASKFLOW_ARTIFACT_DIR: /app/artifacts
+    volumes:
+      - artifacts:/app/artifacts
+    depends_on:
+      db:
+        condition: service_healthy
+
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: taskflow
+      POSTGRES_PASSWORD: taskflow
+      POSTGRES_DB: taskflow
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U taskflow"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  pgdata:
+  artifacts:
