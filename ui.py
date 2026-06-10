@@ -50,90 +50,97 @@ instruction = st.text_area(
 run = st.button("▶  Run Pipeline", type="primary", disabled=not instruction.strip())
 
 # ── Pipeline execution ────────────────────────────────────────────────────────
-if run and instruction.strip():
-    with st.spinner("Running pipeline…"):
-        try:
-            resp = requests.post(
-                f"{api_url}/instructions",
-                json={"instruction": instruction.strip()},
-                timeout=30,
-            )
-            resp.raise_for_status()
-            data = resp.json()
-        except requests.HTTPError as e:
-            st.error(f"API error {e.response.status_code}: {e.response.text}")
-            st.stop()
-        except Exception as e:
-            st.error(f"Request failed: {e}")
-            st.stop()
 
-    st.success(f"Pipeline `{data['pipeline_id']}` completed.")
 
-    col_left, col_right = st.columns([1, 1])
 
-    # ── Task plan ──────────────────────────────────────────────────────────
-    with col_left:
-        st.subheader("Task Plan")
-        tasks = data["plan"]["tasks"]
-        st.caption(f"{len(tasks)} tasks")
-        for t in tasks:
-            deps = ", ".join(t["depends_on"]) or "—"
-            with st.expander(f"**{t['id']}** · {t['action']}  —  {t['description']}", expanded=False):
-                cols = st.columns(2)
-                cols[0].markdown(f"**Depends on:** {deps}")
-                if t.get("condition"):
-                    cols[1].markdown(f"**Condition:** {t['condition']}")
-                if t.get("metadata"):
-                    st.json(t["metadata"], expanded=False)
 
-    # ── Validation ────────────────────────────────────────────────────────
-    with col_right:
-        st.subheader("Validation")
-        v = data["validation"]
-        passed = v.get("passed", False)
-        st.markdown(f"**Result:** {'✅ Passed' if passed else '❌ Failed'}")
 
-        checks = v.get("checks", [])
-        if checks:
-            st.caption(f"{sum(c.get('passed', False) for c in checks)}/{len(checks)} checks passed")
-            for c in checks:
-                icon = "✅" if c.get("passed") else "❌"
-                st.markdown(f"{icon} `{c.get('name', '?')}` — {c.get('message', '')}")
 
-        errors = v.get("errors", [])
-        if errors:
-            st.warning("Errors:\n" + "\n".join(f"- {e}" for e in errors))
 
-    # ── Graph image ───────────────────────────────────────────────────────
-    st.subheader("Task Graph")
-    pid = data["pipeline_id"]
-    artifacts = data.get("artifacts", {})
+# if run and instruction.strip():
+#     with st.spinner("Running pipeline…"):
+#         try:
+#             resp = requests.post(
+#                 f"{api_url}/instructions",
+#                 json={"instruction": instruction.strip()},
+#                 timeout=30,
+#             )
+#             resp.raise_for_status()
+#             data = resp.json()
+#         except requests.HTTPError as e:
+#             st.error(f"API error {e.response.status_code}: {e.response.text}")
+#             st.stop()
+#         except Exception as e:
+#             st.error(f"Request failed: {e}")
+#             st.stop()
 
-    if "task_graph.png" in artifacts:
-        img_resp = requests.get(f"{api_url}/downloads/{pid}/task_graph.png", timeout=10)
-        if img_resp.ok:
-            st.image(img_resp.content, use_container_width=True)
+#     st.success(f"Pipeline `{data['pipeline_id']}` completed.")
 
-    if "task_graph.html" in artifacts:
-        html_resp = requests.get(f"{api_url}/downloads/{pid}/task_graph.html", timeout=10)
-        if html_resp.ok:
-            with st.expander("Interactive graph (HTML)", expanded=False):
-                st.components.v1.html(html_resp.text, height=500, scrolling=True)
+#     col_left, col_right = st.columns([1, 1])
 
-    # ── Downloads ─────────────────────────────────────────────────────────
-    st.subheader("Downloads")
-    dl_cols = st.columns(len(artifacts) if artifacts else 1)
-    for i, name in enumerate(artifacts):
-        url = f"{api_url}/downloads/{pid}/{name}"
-        r2 = requests.get(url, timeout=10)
-        if r2.ok:
-            dl_cols[i % len(dl_cols)].download_button(
-                label=f"⬇ {name}",
-                data=r2.content,
-                file_name=name,
-                key=f"dl_{name}",
-            )
+#     # ── Task plan ──────────────────────────────────────────────────────────
+#     with col_left:
+#         st.subheader("Task Plan")
+#         tasks = data["plan"]["tasks"]
+#         st.caption(f"{len(tasks)} tasks")
+#         for t in tasks:
+#             deps = ", ".join(t["depends_on"]) or "—"
+#             with st.expander(f"**{t['id']}** · {t['action']}  —  {t['description']}", expanded=False):
+#                 cols = st.columns(2)
+#                 cols[0].markdown(f"**Depends on:** {deps}")
+#                 if t.get("condition"):
+#                     cols[1].markdown(f"**Condition:** {t['condition']}")
+#                 if t.get("metadata"):
+#                     st.json(t["metadata"], expanded=False)
 
-    # ── Raw JSON ──────────────────────────────────────────────────────────
-    with st.expander("Raw API response", expanded=False):
-        st.json(data)
+#     # ── Validation ────────────────────────────────────────────────────────
+#     with col_right:
+#         st.subheader("Validation")
+#         v = data["validation"]
+#         passed = v.get("passed", False)
+#         st.markdown(f"**Result:** {'✅ Passed' if passed else '❌ Failed'}")
+
+#         checks = v.get("checks", [])
+#         if checks:
+#             st.caption(f"{sum(c.get('passed', False) for c in checks)}/{len(checks)} checks passed")
+#             for c in checks:
+#                 icon = "✅" if c.get("passed") else "❌"
+#                 st.markdown(f"{icon} `{c.get('name', '?')}` — {c.get('message', '')}")
+
+#         errors = v.get("errors", [])
+#         if errors:
+#             st.warning("Errors:\n" + "\n".join(f"- {e}" for e in errors))
+
+#     # ── Graph image ───────────────────────────────────────────────────────
+#     st.subheader("Task Graph")
+#     pid = data["pipeline_id"]
+#     artifacts = data.get("artifacts", {})
+
+#     if "task_graph.png" in artifacts:
+#         img_resp = requests.get(f"{api_url}/downloads/{pid}/task_graph.png", timeout=10)
+#         if img_resp.ok:
+#             st.image(img_resp.content, use_container_width=True)
+
+#     if "task_graph.html" in artifacts:
+#         html_resp = requests.get(f"{api_url}/downloads/{pid}/task_graph.html", timeout=10)
+#         if html_resp.ok:
+#             with st.expander("Interactive graph (HTML)", expanded=False):
+#                 st.components.v1.html(html_resp.text, height=500, scrolling=True)
+
+#     # ── Downloads ─────────────────────────────────────────────────────────
+#     st.subheader("Downloads")
+#     dl_cols = st.columns(len(artifacts) if artifacts else 1)
+#     for i, name in enumerate(artifacts):
+#         url = f"{api_url}/downloads/{pid}/{name}"
+#         r2 = requests.get(url, timeout=10)
+#         if r2.ok:
+#             dl_cols[i % len(dl_cols)].download_button(
+#                 label=f"⬇ {name}",
+#                 data=r2.content,
+#                 file_name=name,
+#                 key=f"dl_{name}",
+#             )
+
+#     # ── Raw JSON ──────────────────────────────────────────────────────────
+#     with st.expander("Raw API response", expanded=False):
+#         st.json(data)
