@@ -12,10 +12,23 @@ def _b64(p): return base64.b64encode(Path(p).read_bytes()).decode()
 
 @st.cache_resource
 def _load_assets():
-    return _b64(str(_ASSETS/"Technology Gif Background.gif")), \
-           _b64(str(_ASSETS/"sadat-alam-protik-BEa-gD_If1s-unsplash.png"))
+    sound_path = _ASSETS / "artifacts" / "Fahh-sound-effect.mp3"
+    sound = _b64(str(sound_path)) if sound_path.exists() else ""
+    return (
+        _b64(str(_ASSETS/"Technology Gif Background.gif")),
+        _b64(str(_ASSETS/"sadat-alam-protik-BEa-gD_If1s-unsplash.png")),
+        sound,
+    )
 
-_GIF, _SUNSET = _load_assets()
+_GIF, _SUNSET, _ERROR_SOUND = _load_assets()
+
+def _play_error():
+    """Play the fail sound by rendering a self-destructing autoplay audio element."""
+    if _ERROR_SOUND:
+        components.html(
+            f'<audio autoplay style="display:none"><source src="data:audio/mpeg;base64,{_ERROR_SOUND}" type="audio/mpeg"></audio>',
+            height=0,
+        )
 
 st.set_page_config(page_title="TASKFLOW", page_icon="⚡", layout="wide",
                    initial_sidebar_state="expanded")
@@ -503,11 +516,12 @@ with st.sidebar:
         try:
             r = requests.patch(f"{API}/provider", json=payload, timeout=10)
             if r.ok:
-                st.rerun()
+                d = r.json()
+                st.success(f"Switched → {d['provider']}:{d['model']}")
             else:
-                st.error(r.json().get("detail", r.text))
+                _play_error(); st.error(r.json().get("detail", r.text))
         except Exception as e:
-            st.error(f"Cannot reach backend: {e}")
+            _play_error(); st.error(f"Cannot reach backend: {e}")
 
     # current provider badge
     if _cur_name in _PROVIDER_META:
@@ -545,9 +559,9 @@ with st.sidebar:
                 if r.ok:
                     st.session_state["_pull_job"] = r.json()["job_id"]
                 else:
-                    st.error(r.text)
+                    _play_error(); st.error(r.text)
             except Exception as e:
-                st.error(str(e))
+                _play_error(); st.error(str(e))
 
         # poll and show progress
         if st.session_state.get("_pull_job"):
@@ -611,9 +625,9 @@ if run and instruction.strip():
             resp.raise_for_status()
             data = resp.json()
         except requests.HTTPError as e:
-            st.error(f"API {e.response.status_code}: {e.response.text}"); st.stop()
+            _play_error(); st.error(f"API {e.response.status_code}: {e.response.text}"); st.stop()
         except Exception as e:
-            st.error(f"Request failed: {e}"); st.stop()
+            _play_error(); st.error(f"Request failed: {e}"); st.stop()
 
     pid = data["pipeline_id"]
     tasks = data["plan"]["tasks"]
