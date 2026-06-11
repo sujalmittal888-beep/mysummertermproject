@@ -16,7 +16,7 @@ TASK_ID_PATTERN = r"^[A-Za-z0-9][A-Za-z0-9_\-]*$"
 class TaskItemSchema(BaseModel):
     """One task entry inside the JSON task schema."""
 
-    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    model_config = ConfigDict(extra="ignore", str_strip_whitespace=True)
 
     id: str = Field(..., pattern=TASK_ID_PATTERN, max_length=64, description="Unique task id")
     action: str = Field(..., min_length=1, max_length=64, description="Action verb")
@@ -41,7 +41,7 @@ class TaskItemSchema(BaseModel):
 class TaskPlanSchema(BaseModel):
     """Top-level JSON task schema produced by the LLM."""
 
-    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    model_config = ConfigDict(extra="ignore", str_strip_whitespace=True)
 
     version: str = Field(default="1.0", max_length=16)
     instruction: str = Field(..., min_length=1, max_length=2048)

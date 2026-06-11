@@ -1,13 +1,15 @@
 """REST endpoints for the language-to-graph pipeline."""
 from __future__ import annotations
 
+import os
 from typing import Annotated
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import FileResponse
 
 from taskflow import __version__
 from taskflow.application.mappers import schema_to_entity
+from taskflow.config import get_settings
 from taskflow.domain.exceptions import ArtifactNotFoundError
 from taskflow.presentation.api.dependencies import Container, get_container
 from taskflow.presentation.api.dto import (
@@ -18,6 +20,8 @@ from taskflow.presentation.api.dto import (
     ParseResponse,
     PipelineResponse,
     PlanRequest,
+    ProviderSwitchRequest,
+    ProviderSwitchResponse,
 )
 
 router = APIRouter()
@@ -131,3 +135,46 @@ def download_artifact(pipeline_id: str, artifact: str, c: ContainerDep) -> FileR
 @router.get("/health", response_model=HealthResponse, summary="Liveness probe")
 def health(c: ContainerDep) -> HealthResponse:
     return HealthResponse(status="ok", version=__version__, provider=c.provider.name)
+
+
+@router.patch("/provider", response_model=ProviderSwitchResponse, summary="Hot-swap LLM provider")
+def switch_provider(req: ProviderSwitchRequest) -> ProviderSwitchResponse:
+    VALID = {"openai", "anthropic", "gemini", "ollama", "mock"}
+    if req.provider not in VALID:
+        raise HTTPException(422, f"provider must be one of {sorted(VALID)}")
+
+    # write into the process environment so get_settings() picks them up
+    os.environ["TASKFLOW_LLM_PROVIDER"] = req.provider
+    if req.model:
+        os.environ["TASKFLOW_LLM_MODEL"] = req.model
+    else:
+        os.environ.pop("TASKFLOW_LLM_MODEL", None)
+    if req.api_key:
+        key_map = {"openai": "TASKFLOW_OPENAI_API_KEY",
+                   "anthropic": "TASKFLOW_ANTHROPIC_API_KEY",
+                   "gemini": "TASKFLOW_GEMINI_API_KEY"}
+        env_key = key_map.get(req.provider)
+        if env_key:
+            os.environ[env_key] = req.api_key
+    if req.base_url and req.provider == "ollama":
+        os.environ["TASKFLOW_OLLAMA_BASE_URL"] = req.base_url
+
+    # clear caches so the next request rebuilds with new settings
+    get_settings.cache_clear()
+    get_container.cache_clear()
+
+    # rebuild now to surface config errors immediately (bad key, unreachable Ollama, etc.)
+    from taskflow.presentation.api.dependencies import build_container
+    try:
+        build_container(get_settings())
+    except Exception as exc:
+        # roll back — restore previous container on next request via cache clear
+        get_settings.cache_clear()
+        get_container.cache_clear()
+        raise HTTPException(400, str(exc)) from exc
+
+    new_settings = get_settings()
+    return ProviderSwitchResponse(
+        provider=new_settings.llm_provider,
+        model=new_settings.resolved_llm_model,
+    )

@@ -427,7 +427,7 @@ st.markdown(f"""
   <div style="flex:1;min-width:0;">
     <div style="font-family:Orbitron,sans-serif;font-size:0.6rem;color:rgba(0,245,255,0.65);letter-spacing:5px;text-transform:uppercase;margin-bottom:0.5rem;">⚡ Industrial AI Pipeline v1.0</div>
     <div class="glitch" data-text="TASKFLOW" style="font-family:Orbitron,sans-serif;font-size:3rem;font-weight:900;letter-spacing:5px;background:linear-gradient(90deg,#00f5ff,#bf00ff,#ff6b00,#00f5ff);background-size:300%;-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;animation:gshift 4s ease infinite;">TASKFLOW</div>
-    <div style="color:rgba(232,244,255,0.55);font-size:0.9rem;margin-top:0.5rem;max-width:460px;line-height:1.6;">Transform natural language into validated Task Flow DAGs — powered by Gemini AI.</div>
+    <div style="color:rgba(232,244,255,0.55);font-size:0.9rem;margin-top:0.5rem;max-width:460px;line-height:1.6;">Transform natural language into validated Task Flow DAGs — swap providers in the sidebar.</div>
     <div style="margin-top:0.9rem;">{_status}</div>
   </div>
   <div style="flex-shrink:0;position:relative;">
@@ -447,9 +447,127 @@ EXAMPLES = [
     "Pick item from room 1, drop at room 3, while dropping three products at room 2.",
 ]
 
+_PROVIDER_META = {
+    "gemini": {"label": "☁  Gemini (Google)", "color": "#4285F4", "needs_key": True,  "needs_url": False, "default_model": "gemini-2.5-flash"},
+    "ollama": {"label": "🖥  Ollama (Local)",  "color": "#00ff88", "needs_key": False, "needs_url": True,  "default_model": "llama3.2"},
+    "openai": {"label": "☁  OpenAI",           "color": "#bf00ff", "needs_key": True,  "needs_url": False, "default_model": "gpt-4o"},
+    "mock":   {"label": "🧪  Mock (offline)",  "color": "#ff6b00", "needs_key": False, "needs_url": False, "default_model": "mock-deterministic-v1"},
+}
+
 with st.sidebar:
-    st.markdown("### SYSTEM")
-    api_url = st.text_input("API URL", value=API, label_visibility="collapsed")
+    st.markdown("### LLM PROVIDER")
+
+    # fetch current provider from backend
+    try:
+        _cur = requests.get(f"{API}/health", timeout=2).json().get("provider", "")
+        _cur_name = _cur.split(":")[0] if ":" in _cur else _cur
+    except Exception:
+        _cur_name = ""
+
+    selected_provider = st.selectbox(
+        "Provider", options=list(_PROVIDER_META.keys()),
+        format_func=lambda k: _PROVIDER_META[k]["label"],
+        index=list(_PROVIDER_META.keys()).index(_cur_name) if _cur_name in _PROVIDER_META else 0,
+        label_visibility="collapsed",
+    )
+
+    meta = _PROVIDER_META[selected_provider]
+
+    # for Ollama: show a dropdown of installed models, fall back to text input if none
+    if selected_provider == "ollama":
+        try:
+            _om = requests.get(f"{API}/ollama/models", timeout=3).json()
+            _installed = [m["name"] for m in _om.get("models", [])]
+        except Exception:
+            _installed = []
+
+        if _installed:
+            model_val = st.selectbox("Model", options=_installed, label_visibility="visible")
+        else:
+            st.caption("No models installed yet — pull one below first.")
+            model_val = st.text_input("Model", value=meta["default_model"], placeholder="model name")
+    else:
+        model_val = st.text_input("Model", value=meta["default_model"], placeholder="model name")
+
+    api_key_val = ""
+    if meta["needs_key"]:
+        api_key_val = st.text_input("API Key", type="password", placeholder="paste your key…")
+
+    base_url_val = "http://localhost:11434"
+    if meta["needs_url"]:
+        base_url_val = st.text_input("Ollama URL", value="http://localhost:11434")
+
+    if st.button("⚡  CONNECT", type="primary", use_container_width=True):
+        payload = {"provider": selected_provider, "model": model_val,
+                   "api_key": api_key_val, "base_url": base_url_val}
+        try:
+            r = requests.patch(f"{API}/provider", json=payload, timeout=10)
+            if r.ok:
+                st.rerun()
+            else:
+                st.error(r.json().get("detail", r.text))
+        except Exception as e:
+            st.error(f"Cannot reach backend: {e}")
+
+    # current provider badge
+    if _cur_name in _PROVIDER_META:
+        c = _PROVIDER_META[_cur_name]["color"]
+        st.markdown(f'<div style="margin-top:6px;padding:6px 12px;border-radius:8px;border:1px solid {c}44;background:{c}11;color:{c};font-size:0.7rem;font-family:Orbitron,sans-serif;letter-spacing:1px;text-align:center;">ACTIVE: {_cur}</div>', unsafe_allow_html=True)
+
+    # ── Ollama model manager (only shown when Ollama is selected) ──
+    if selected_provider == "ollama":
+        st.divider()
+        st.markdown("### OLLAMA MODELS")
+
+        # list installed models
+        try:
+            mdata = requests.get(f"{API}/ollama/models", timeout=5).json()
+            if mdata.get("error"):
+                st.warning(mdata["error"])
+            else:
+                installed = mdata.get("models", [])
+                if installed:
+                    for m in installed:
+                        st.markdown(f'<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid rgba(0,245,255,0.08);"><span style="color:#00ff88;font-size:0.75rem;font-family:monospace;">{m["name"]}</span><span style="color:rgba(232,244,255,0.35);font-size:0.7rem;">{m["size"]}</span></div>', unsafe_allow_html=True)
+                else:
+                    st.caption("No models installed yet.")
+        except Exception:
+            st.caption("Backend offline.")
+
+        st.markdown('<div style="margin-top:10px;"></div>', unsafe_allow_html=True)
+        pull_model_name = st.text_input("Pull a model", placeholder="e.g. llama3.2, qwen2.5:7b", label_visibility="visible")
+        pull_btn = st.button("⬇  PULL MODEL", use_container_width=True, disabled=not pull_model_name.strip())
+
+        if pull_btn and pull_model_name.strip():
+            st.session_state["_pull_job"] = None
+            try:
+                r = requests.post(f"{API}/ollama/pull", json={"model": pull_model_name.strip()}, timeout=5)
+                if r.ok:
+                    st.session_state["_pull_job"] = r.json()["job_id"]
+                else:
+                    st.error(r.text)
+            except Exception as e:
+                st.error(str(e))
+
+        # poll and show progress
+        if st.session_state.get("_pull_job"):
+            job_id = st.session_state["_pull_job"]
+            progress_box = st.empty()
+            try:
+                job = requests.get(f"{API}/ollama/pull/{job_id}", timeout=5).json()
+                last_line = job["lines"][-1] if job["lines"] else job["status"]
+                if job["error"]:
+                    progress_box.error(job["error"])
+                    st.session_state["_pull_job"] = None
+                elif job["done"]:
+                    progress_box.success(f"✓ {pull_model_name} ready!")
+                    st.session_state["_pull_job"] = None
+                else:
+                    progress_box.markdown(f'<div style="color:#00f5ff;font-size:0.72rem;font-family:monospace;padding:6px;background:rgba(0,245,255,0.05);border-radius:6px;border:1px solid rgba(0,245,255,0.15);">⬇ {last_line}</div>', unsafe_allow_html=True)
+                    import time; time.sleep(1); st.rerun()
+            except Exception:
+                pass
+
     st.divider()
     st.markdown("### EXAMPLES")
     for ex in EXAMPLES:
@@ -458,11 +576,15 @@ with st.sidebar:
     st.divider()
     st.markdown('<div style="color:rgba(0,245,255,0.2);font-size:0.6rem;text-align:center;font-family:Orbitron,sans-serif;letter-spacing:3px;">TASKFLOW v1.0.0</div>', unsafe_allow_html=True)
 
+api_url = API
+
 # ═══════════════════════════════════════════════════════════
 #  INPUT
 # ═══════════════════════════════════════════════════════════
 if "_instr" not in st.session_state:
     st.session_state["_instr"] = ""
+if "_pull_job" not in st.session_state:
+    st.session_state["_pull_job"] = None
 
 st.markdown("### INSTRUCTION INPUT")
 instruction = st.text_area(
@@ -482,7 +604,7 @@ ACTION_COLORS = {
 }
 
 if run and instruction.strip():
-    with st.spinner("Firing up Gemini AI…"):
+    with st.spinner("Firing up model…"):
         try:
             resp = requests.post(f"{api_url}/instructions",
                                  json={"instruction": instruction.strip()}, timeout=60)

@@ -45,3 +45,15 @@ class HealthResponse(BaseModel):
     status: str
     version: str
     provider: str
+
+
+class ProviderSwitchRequest(BaseModel):
+    provider: str
+    model: str = ""
+    api_key: str = ""
+    base_url: str = ""
+
+
+class ProviderSwitchResponse(BaseModel):
+    provider: str
+    model: str

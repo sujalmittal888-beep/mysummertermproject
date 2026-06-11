@@ -17,11 +17,12 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
 
     # LLM provider configuration
-    llm_provider: Literal["openai", "anthropic", "gemini", "mock"] = "mock"
+    llm_provider: Literal["openai", "anthropic", "gemini", "ollama", "mock"] = "mock"
     llm_model: str = ""
     openai_api_key: str = ""
     anthropic_api_key: str = ""
     gemini_api_key: str = ""
+    ollama_base_url: str = "http://localhost:11434"
     llm_timeout_seconds: float = 60.0
     llm_max_retries: int = 2
 
@@ -39,6 +40,7 @@ class Settings(BaseSettings):
             "openai": "gpt-4o",
             "anthropic": "claude-sonnet-4-20250514",
             "gemini": "gemini-2.5-flash",
+            "ollama": "llama3.2",
             "mock": "mock-deterministic-v1",
         }[self.llm_provider]
 

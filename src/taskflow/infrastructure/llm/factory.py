@@ -6,6 +6,7 @@ from taskflow.config import Settings
 from taskflow.infrastructure.llm.anthropic_provider import AnthropicProvider
 from taskflow.infrastructure.llm.gemini_provider import GeminiProvider
 from taskflow.infrastructure.llm.mock_provider import MockLLMProvider
+from taskflow.infrastructure.llm.ollama_provider import OllamaProvider
 from taskflow.infrastructure.llm.openai_provider import OpenAIProvider
 
 
@@ -26,6 +27,10 @@ def create_llm_provider(settings: Settings) -> LLMProvider:
         case "gemini":
             return GeminiProvider(
                 api_key=settings.gemini_api_key, model=settings.resolved_llm_model, **common
+            )
+        case "ollama":
+            return OllamaProvider(
+                base_url=settings.ollama_base_url, model=settings.resolved_llm_model, **common
             )
         case "mock":
             return MockLLMProvider(model=settings.resolved_llm_model, **common)
