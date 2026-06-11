@@ -4,6 +4,7 @@ from __future__ import annotations
 from taskflow.application.interfaces import LLMProvider
 from taskflow.config import Settings
 from taskflow.infrastructure.llm.anthropic_provider import AnthropicProvider
+from taskflow.infrastructure.llm.gemini_provider import GeminiProvider
 from taskflow.infrastructure.llm.mock_provider import MockLLMProvider
 from taskflow.infrastructure.llm.openai_provider import OpenAIProvider
 
@@ -21,6 +22,10 @@ def create_llm_provider(settings: Settings) -> LLMProvider:
         case "anthropic":
             return AnthropicProvider(
                 api_key=settings.anthropic_api_key, model=settings.resolved_llm_model, **common
+            )
+        case "gemini":
+            return GeminiProvider(
+                api_key=settings.gemini_api_key, model=settings.resolved_llm_model, **common
             )
         case "mock":
             return MockLLMProvider(model=settings.resolved_llm_model, **common)

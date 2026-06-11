@@ -134,6 +134,39 @@ class MockLLMProvider(BaseLLMProvider):
                 "metadata": {"object": obj, "location": target.title()},
             }
             tasks.append(place)
+            last = [place["id"]]
+
+        # Handle secondary "drop/place at <location>" clauses (e.g. "while dropping X at room 2")
+        secondary_drops = list(re.finditer(
+            r"(?:while |also |then )?(?:drop(?:ping)?|place|deliver(?:ing)?)\s+"
+            r"(?:the |all |each |three |two |[\d]+ )?(?P<obj2>[\w\s\-]+?)\s+"
+            r"(?:at|to|on|onto)\s+(?P<loc2>[\w\s\-]+?)(?:,|\.| and | then |while |$)",
+            lowered,
+        ))
+        for m in secondary_drops:
+            obj2 = m.group("obj2").strip()
+            loc2 = m.group("loc2").strip()
+            # Skip if this is just the primary operation re-matched
+            if loc2 == target.lower() and obj2 in obj:
+                continue
+            nav2 = {
+                "id": next_id(),
+                "action": "navigate",
+                "description": f"Navigate to {loc2.title()}",
+                "depends_on": last,
+                "condition": None,
+                "metadata": {"location": loc2.title()},
+            }
+            drop2 = {
+                "id": next_id(),
+                "action": "place",
+                "description": f"Place {obj2} at {loc2.title()}",
+                "depends_on": [nav2["id"]],
+                "condition": None,
+                "metadata": {"object": obj2, "location": loc2.title()},
+            }
+            tasks.extend([nav2, drop2])
+            last = [drop2["id"]]
 
         return json.dumps({"version": "1.0", "instruction": text, "tasks": tasks})
 
